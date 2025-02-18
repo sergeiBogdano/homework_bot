@@ -4,7 +4,7 @@ import sys
 import os
 import logging
 from dotenv import load_dotenv
-from telebot import TeleBot
+from telebot import TeleBot, apihelper
 from exceptions import (
     MissingEnvironmentVariableError,
     APIRequestError,
@@ -28,27 +28,24 @@ HOMEWORK_VERDICTS = {
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
-REQUIRED_ENV_VARS = ['TELEGRAM_TOKEN', 'CHAT_ID', 'API_URL']
 
 logging.basicConfig(
     level=logging.DEBUG,
-    filename='./homework_log.log',
     format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.FileHandler('./homework_log.log'),
+        logging.StreamHandler(sys.stdout)
+    ]
 )
-
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-handler = logging.StreamHandler(stream=sys.stdout)
-logger.addHandler(handler)
 
 
 def check_tokens():
-    """Проверяет доступность необходимых переменных окружения."""
-    for var in REQUIRED_ENV_VARS:
-        if not os.getenv(var):
-            logging.critical(f'Отсутствует обязательная переменная окружения: {var}')
-            raise MissingEnvironmentVariableError(f'Отсутствует обязательная переменная окружения: {var}')
-    return True
+    """Проверяет доступность переменных окружения.
+    Если отсутствует хотя бы одна переменная окружения —
+    функция должна вернуть False, иначе — True.
+    """
+    return all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID])
 
 
 def get_api_answer(timestamp):
@@ -112,57 +109,41 @@ def parse_status(homework):
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
-# def send_message(bot, message):
-#     """Отправляет сообщение в Telegram чат."""
-#     try:
-#         logger.info(f'Бот отправил сообщение: "{message}"')
-#         return bot.send_message(TELEGRAM_CHAT_ID, message)
-#     except telegram.error.TelegramError as error:
-#         logger.error(f'Боту не удалось отправить сообщение: "{error}"')
-#         raise exceptions.SendMessageException(error)
-
 def send_message(bot, message):
     """Отправляет сообщение в Telegram чат."""
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
-        logging.debug(f'Бот отправил сообщение: "{message}"')  # Логирование на уровне DEBUG
-    except Exception as error:  # Замените Exception на конкретное исключение, если необходимо
-        logging.error(f'Сбой при отправке сообщения в Telegram: {error}')  # Логирование на уровне ERROR
+        logging.debug(f'Бот отправил сообщение: "{message}"')
+    except apihelper.ApiException as error:
+        logging.error(f'Сбой при отправке сообщения в Telegram: {error}')
         raise TelegramSendMessageError(error)
 
 
 def main():
     """Основная логика работы бота."""
-    try:
-        check_tokens()
-    except MissingEnvironmentVariableError as error:
-        logging.critical(error)
-        return
-
+    if not check_tokens():
+        logger.critical('Отсутствует переменная окружения')
+        sys.exit()
     bot = TeleBot(token=TELEGRAM_TOKEN)
-    timestamp = int(time.time())
-    last_error_message = None
-
+    current_timestamp = int(time.time())
     while True:
         try:
-            api_response = get_api_answer(timestamp)
-            homeworks = check_response(api_response)
-
-            for homework in homeworks:
-                message = parse_status(homework)
+            response = get_api_answer(current_timestamp)
+            homeworks = check_response(response)
+            if homeworks:
+                message = parse_status(homeworks[0])
                 send_message(bot, message)
-
-            time.sleep(RETRY_PERIOD)
-
+            else:
+                logger.debug('Новые статусы в ответе отсутствуют')
+            current_timestamp = response.get(
+                'current_date',
+                int(time.time()) - RETRY_PERIOD
+            )
         except Exception as error:
-            error_message = f'Сбой в работе программы: {error}'
-            logging.error(error_message)
-            if last_error_message != error_message:
-                try:
-                    send_message(bot, error_message)
-                except TelegramSendMessageError as error:
-                    logging.error(f'Ошибка при отправке сообщения об ошибке: {error}')
-                last_error_message = error_message
+            logger.error(error)
+            message = f'Сбой в работе программы: {error}'
+            send_message(bot, message)
+        finally:
             time.sleep(RETRY_PERIOD)
 
 
