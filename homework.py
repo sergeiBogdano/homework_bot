@@ -1,15 +1,17 @@
-import time
-import requests
-import sys
-import os
 import logging
+import os
+import sys
+import time
+
 from dotenv import load_dotenv
+import requests
 from telebot import TeleBot, apihelper
+
 from exceptions import (
-    MissingEnvironmentVariableError,
     APIRequestError,
-    UnknownHomeworkStatusError,
-    TelegramSendMessageError
+    MissingEnvironmentVariableError,
+    TelegramSendMessageError,
+    UnknownHomeworkStatusError
 )
 
 load_dotenv()
@@ -28,7 +30,6 @@ HOMEWORK_VERDICTS = {
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
-
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s [%(levelname)s] %(message)s',
@@ -41,10 +42,7 @@ logger = logging.getLogger(__name__)
 
 
 def check_tokens():
-    """Проверяет доступность переменных окружения.
-    Если отсутствует хотя бы одна переменная окружения —
-    функция должна вернуть False, иначе — True.
-    """
+    """Проверяет доступность переменных окружения."""
     return all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID])
 
 
@@ -91,19 +89,29 @@ def check_response(response):
 def parse_status(homework):
     """Извлекает статус домашней работы и возвращает строку с вердиктом."""
     if 'status' not in homework:
-        logging.error('В информации о домашней работе отсутствует ключ "status".')
-        raise KeyError('В информации о домашней работе отсутствует ключ "status".')
+        logging.error(
+            'В информации о домашней работе отсутствует ключ "status".'
+        )
+        raise KeyError(
+            'В информации о домашней работе отсутствует ключ "status".'
+        )
 
     if 'homework_name' not in homework:
-        logging.error('В информации о домашней работе отсутствует ключ "homework_name".')
-        raise KeyError('В информации о домашней работе отсутствует ключ "homework_name".')
+        logging.error(
+            'В информации о домашней работе отсутствует ключ "homework_name".'
+        )
+        raise KeyError(
+            'В информации о домашней работе отсутствует ключ "homework_name".'
+        )
 
     status = homework['status']
     homework_name = homework['homework_name']
 
     if status not in HOMEWORK_VERDICTS:
         logging.error(f'Неизвестный статус домашней работы: {status}')
-        raise UnknownHomeworkStatusError(f'Неизвестный статус домашней работы: {status}')
+        raise UnknownHomeworkStatusError(
+            f'Неизвестный статус домашней работы: {status}'
+        )
 
     verdict = HOMEWORK_VERDICTS[status]
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
@@ -121,9 +129,15 @@ def send_message(bot, message):
 
 def main():
     """Основная логика работы бота."""
-    if not check_tokens():
-        logger.critical('Отсутствует переменная окружения')
+    try:
+        if not check_tokens():
+            raise MissingEnvironmentVariableError(
+                'Отсутствует одна или несколько переменных окружения'
+            )
+    except MissingEnvironmentVariableError as error:
+        logger.critical(error)
         sys.exit()
+
     bot = TeleBot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
     while True:
