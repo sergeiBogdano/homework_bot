@@ -33,13 +33,11 @@ log_file_path = os.path.join(os.path.expanduser('~'), 'homework_log.log')
 
 logging.basicConfig(
     level=logging.DEBUG,
-    format=
-    '%(asctime)s'
+    format='%(asctime)s'
     ' [%(levelname)s]'
     ' %(filename)s:%(lineno)d'
     ' - %(funcName)s()'
-    ' - %(message)s'
-    ,
+    ' - %(message)s',
     handlers=[
         logging.FileHandler(log_file_path, encoding='utf-8'),
         logging.StreamHandler(sys.stdout)
