@@ -65,7 +65,6 @@ def check_tokens():
             f'Отсутствуют следующие переменные окружения: '
             f'{missing_tokens_str}'
         )
-    return True
 
 
 def get_api_answer(timestamp):
@@ -77,27 +76,38 @@ def get_api_answer(timestamp):
     }
 
     logger.debug(
-        "Начало запроса к API: "
-        "URL=%(url)s,"
-        " Headers=%(headers)s,"
-        " Params=%(params)s",
-        request_params
+        'Начало запроса к API: '
+        'URL={url}, '
+        'Headers={headers}, '
+        'Params={params}'.format(
+            url=request_params['url'],
+            headers=request_params['headers'],
+            params=request_params['params']
+        )
     )
 
     try:
         response = requests.get(**request_params)
     except requests.RequestException as error:
         raise ConnectionError(
-            f"Сбой при запросе к API: URL={request_params['url']}, "
-            f"Headers={request_params['headers']},"
-            f" Params={request_params['params']}, "
-            f"Ошибка: {error}"
+            'Сбой при запросе к API: URL={url}, '
+            'Headers={headers}, '
+            'Params={params}, '
+            'Ошибка: {error}'.format(
+                url=request_params['url'],
+                headers=request_params['headers'],
+                params=request_params['params'],
+                error=error
+            )
         )
     if response.status_code != HTTPStatus.OK:
         raise InvalidResponseCodeError(
-            f"API вернул код, отличный от 200: Код ответа="
-            f"{response.status_code}, "
-            f"Причина={response.reason}, Текст ответа={response.text}"
+            'API вернул код, отличный от 200: Код ответа={status_code}, '
+            'Причина={reason}, Текст ответа={text}'.format(
+                status_code=response.status_code,
+                reason=response.reason,
+                text=response.text
+            )
         )
     return response.json()
 
@@ -136,47 +146,45 @@ def send_message(bot, message):
     """Отправляет сообщение в Telegram чат и возвращает статус отправки."""
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
+        logger.debug(f'Бот отправил сообщение: "{message}"')
+        return True
     except apihelper.ApiException as error:
         logger.error(f'Сбой при отправке сообщения в Telegram: {error}')
         return False
-    logger.debug(f'Бот отправил сообщение: "{message}"')
-    return True
 
 
 def main():
     """Основная логика работы бота."""
-    if not check_tokens():
-        logger.critical('Отсутствует одна или несколько переменных окружения')
-        sys.exit()
+    try:
+        check_tokens()
+    except MissingEnvironmentVariableError as error:
+        logger.critical(error)
+        sys.exit(1)
     bot = TeleBot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
-    last_message = None
+    last_message = ''
 
     while True:
         try:
             response = get_api_answer(current_timestamp)
             homeworks = check_response(response)
-
             if not homeworks:
                 logger.debug('Новые статусы в ответе отсутствуют')
-                continue
-            homework = homeworks[0]
-            message = parse_status(homework)
-            if message != last_message:
-                if send_message(bot, message):
+            else:
+                homework = homeworks[0]
+                message = parse_status(homework)
+                if message != last_message and send_message(bot, message):
                     last_message = message
-            current_timestamp = response.get(
-                'current_date',
-                current_timestamp
-            )
+                    current_timestamp = response.get(
+                        'current_date',
+                        current_timestamp
+                    )
 
         except Exception as error:
-            logger.exception('Сбой в работе программы')
             message = f'Сбой в работе программы: {error}'
-
-            if message != last_message:
-                if send_message(bot, message):
-                    last_message = message
+            logger.exception(message)
+            if message != last_message and send_message(bot, message):
+                last_message = message
 
         finally:
             time.sleep(RETRY_PERIOD)
