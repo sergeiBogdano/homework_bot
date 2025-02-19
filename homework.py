@@ -139,9 +139,9 @@ def send_message(bot, message):
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
     except apihelper.ApiException as error:
-        logging.error(f'Сбой при отправке сообщения в Telegram: {error}')
+        logger.error(f'Сбой при отправке сообщения в Telegram: {error}')
         return False
-    logging.debug(f'Бот отправил сообщение: "{message}"')
+    logger.debug(f'Бот отправил сообщение: "{message}"')
     return True
 
 
