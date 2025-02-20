@@ -77,12 +77,8 @@ def get_api_answer(timestamp):
 
     logger.debug(
         'Начало запроса к API: '
-        'URL={url}, '
-        'Headers={headers}, '
-        'Params={params}'.format(
-            url=request_params['url'],
-            headers=request_params['headers'],
-            params=request_params['params']
+        'URL={url}, Headers={headers}, Params={params}'.format(
+            **request_params
         )
     )
 
@@ -90,20 +86,18 @@ def get_api_answer(timestamp):
         response = requests.get(**request_params)
     except requests.RequestException as error:
         raise ConnectionError(
-            'Сбой при запросе к API: URL={url}, '
-            'Headers={headers}, '
-            'Params={params}, '
-            'Ошибка: {error}'.format(
-                url=request_params['url'],
-                headers=request_params['headers'],
-                params=request_params['params'],
-                error=error
+            'Сбой при запросе к API: URL={url},'
+            ' Headers={headers},'
+            ' Params={params},'
+            ' Ошибка: {error}'.format(
+                **request_params, error=error
             )
         )
     if response.status_code != HTTPStatus.OK:
         raise InvalidResponseCodeError(
-            'API вернул код, отличный от 200: Код ответа={status_code}, '
-            'Причина={reason}, Текст ответа={text}'.format(
+            'API вернул код, отличный от 200: Код ответа={status_code},'
+            ' Причина={reason},'
+            ' Текст ответа={text}'.format(
                 status_code=response.status_code,
                 reason=response.reason,
                 text=response.text
@@ -155,11 +149,7 @@ def send_message(bot, message):
 
 def main():
     """Основная логика работы бота."""
-    try:
-        check_tokens()
-    except MissingEnvironmentVariableError as error:
-        logger.critical(error)
-        sys.exit(1)
+    check_tokens()
     bot = TeleBot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
     last_message = ''
@@ -170,15 +160,17 @@ def main():
             homeworks = check_response(response)
             if not homeworks:
                 logger.debug('Новые статусы в ответе отсутствуют')
-            else:
-                homework = homeworks[0]
-                message = parse_status(homework)
-                if message != last_message and send_message(bot, message):
-                    last_message = message
-                    current_timestamp = response.get(
-                        'current_date',
-                        current_timestamp
-                    )
+                continue
+
+            homework = homeworks[0]
+            message = parse_status(homework)
+
+            if message != last_message and send_message(bot, message):
+                last_message = message
+                current_timestamp = response.get(
+                    'current_date',
+                    current_timestamp
+                )
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
